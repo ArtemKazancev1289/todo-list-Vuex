@@ -1,0 +1,563 @@
+<!DOCTYPE html>
+<html lang="en">
+	<head>
+		<meta charset="UTF-8" />
+		<title>Список дел</title>
+		<link
+			href="https://cdn.jsdelivr.net/npm/vuetify@3.4.0/dist/vuetify.min.css"
+			rel="stylesheet"
+		/>
+		<link
+			href="https://cdn.jsdelivr.net/npm/@mdi/font@7.2.96/css/materialdesignicons.min.css"
+			rel="stylesheet"
+		/>
+		<link
+			href="https://fonts.googleapis.com/css?family=Roboto:100,300,400,500,700,900"
+			rel="stylesheet"
+		/>
+		<style>
+			body {
+				font-family: 'Roboto', sans-serif;
+				margin: 0;
+				padding: 0;
+				background-color: #f5f5f5;
+			}
+			.priority-item {
+				border-left: 4px solid #ff5252;
+			}
+			.completed-item {
+				opacity: 0.7;
+			}
+			.v-main {
+				max-width: 900px;
+				margin: 0 auto;
+			}
+			.router-link-active {
+				font-weight: bold;
+			}
+			.list-selector {
+				margin-bottom: 20px;
+			}
+			.list-actions {
+				margin-top: 20px;
+				display: flex;
+				justify-content: space-between;
+			}
+		</style>
+	</head>
+
+	<body>
+		<div id="app">
+			<v-app>
+				<v-main>
+					<v-container>
+						<v-card class="pa-6" elevation="8">
+							<v-tabs v-model="currentListId" class="list-selector">
+								<v-tab
+									v-for="list in lists"
+									:key="list.id"
+									:value="list.id"
+									:to="'/list/' + list.id"
+								>
+									{{ list.name }}
+								</v-tab>
+								<v-tab @click="showAddListDialog = true">
+									<v-icon>mdi-plus</v-icon>
+								</v-tab>
+							</v-tabs>
+
+							<div
+								class="header d-flex justify-space-between align-center mb-4"
+							>
+								<v-card-title class="text-h4"
+									>{{ currentListName }}</v-card-title
+								>
+								<div>
+									<v-btn
+										v-if="editing"
+										@click="toggleEditing(false)"
+										color="error"
+										variant="outlined"
+										class="ml-2"
+									>
+										<v-icon start>mdi-arrow-left</v-icon>
+										Назад
+									</v-btn>
+									<v-btn
+										v-else
+										@click="toggleEditing(true)"
+										color="primary"
+										class="ml-2"
+									>
+										<v-icon start>mdi-plus</v-icon>
+										Добавить дело
+									</v-btn>
+									<v-btn
+										@click="showDeleteConfirm = true"
+										color="error"
+										variant="text"
+										class="ml-2"
+										:disabled="lists.length <= 1"
+									>
+										<v-icon>mdi-delete</v-icon>
+									</v-btn>
+								</div>
+							</div>
+
+							<v-expand-transition>
+								<div v-if="editing">
+									<v-form
+										@submit.prevent="addItem"
+										class="add-item-form d-flex align-center mb-4"
+									>
+										<v-text-field
+											v-model="newItemText"
+											placeholder="Новое задание"
+											variant="outlined"
+											density="comfortable"
+											hide-details
+											class="mr-4 flex-grow-1"
+											autofocus
+										></v-text-field>
+
+										<v-checkbox
+											v-model="newItemHighPriority"
+											label="Высокий приоритет"
+											color="red"
+											hide-details
+											class="mr-4"
+										></v-checkbox>
+
+										<v-btn
+											type="submit"
+											color="primary"
+											:disabled="!newItemText"
+											size="large"
+										>
+											<v-icon start>mdi-content-save</v-icon>
+											Добавить
+										</v-btn>
+									</v-form>
+								</div>
+							</v-expand-transition>
+
+							<v-alert
+								v-if="currentItems.length === 0"
+								type="success"
+								variant="tonal"
+								class="mb-4"
+							>
+								Отличная работа! Вы выполнили все дела!
+							</v-alert>
+
+							<v-list lines="two" v-if="currentItems.length > 0">
+								<v-list-item
+									v-for="item in reversedItems"
+									:key="item.id"
+									@click="toggleItemStatus(item.id)"
+									:class="{
+                  'priority-item': item.highPriority,
+                  'completed-item': item.purchased
+                }"
+									class="mb-2"
+								>
+									<template v-slot:prepend>
+										<v-checkbox
+											:model-value="item.purchased"
+											color="primary"
+											hide-details
+											class="mr-2"
+										></v-checkbox>
+									</template>
+
+									<v-list-item-title
+										:class="{ 'text-decoration-line-through': item.purchased }"
+										class="text-h6"
+									>
+										{{ item.label }}
+										<v-chip
+											v-if="item.highPriority"
+											size="small"
+											color="red"
+											variant="outlined"
+											class="ml-2"
+										>
+											Высокий приоритет
+										</v-chip>
+									</v-list-item-title>
+
+									<template v-slot:append>
+										<v-btn
+											icon
+											variant="text"
+											color="error"
+											@click.stop="removeItem(item.id)"
+										>
+											<v-icon>mdi-delete</v-icon>
+										</v-btn>
+									</template>
+								</v-list-item>
+							</v-list>
+
+							<div class="list-actions" v-if="currentItems.length > 0">
+								<v-btn
+									@click="clearCompleted"
+									color="secondary"
+									variant="outlined"
+								>
+									<v-icon start>mdi-check-all</v-icon>
+									Удалить выполненные
+								</v-btn>
+								<v-btn
+									@click="showClearConfirm = true"
+									color="error"
+									variant="outlined"
+								>
+									<v-icon start>mdi-delete-variant</v-icon>
+									Очистить список
+								</v-btn>
+							</div>
+						</v-card>
+					</v-container>
+				</v-main>
+				<v-dialog v-model="showAddListDialog" max-width="500">
+					<v-card>
+						<v-card-title>Добавить новый список</v-card-title>
+						<v-card-text>
+							<v-text-field
+								v-model="newListName"
+								label="Название списка"
+								variant="outlined"
+								autofocus
+								@keyup.enter="addList"
+							></v-text-field>
+						</v-card-text>
+						<v-card-actions>
+							<v-spacer></v-spacer>
+							<v-btn @click="showAddListDialog = false">Отмена</v-btn>
+							<v-btn color="primary" @click="addList" :disabled="!newListName">
+								Добавить
+							</v-btn>
+						</v-card-actions>
+					</v-card>
+				</v-dialog>
+				<v-dialog v-model="showDeleteConfirm" max-width="500">
+					<v-card>
+						<v-card-title>Удалить список?</v-card-title>
+						<v-card-text>
+							Вы уверены, что хотите удалить список "{{ currentListName }}"? Все
+							задачи в этом списке будут удалены.
+						</v-card-text>
+						<v-card-actions>
+							<v-spacer></v-spacer>
+							<v-btn @click="showDeleteConfirm = false">Отмена</v-btn>
+							<v-btn color="error" @click="deleteCurrentList"> Удалить </v-btn>
+						</v-card-actions>
+					</v-card>
+				</v-dialog>
+				<v-dialog v-model="showClearConfirm" max-width="500">
+					<v-card>
+						<v-card-title>Очистить список?</v-card-title>
+						<v-card-text>
+							Вы уверены, что хотите удалить все задачи из списка "{{
+							currentListName }}"?
+						</v-card-text>
+						<v-card-actions>
+							<v-spacer></v-spacer>
+							<v-btn @click="showClearConfirm = false">Отмена</v-btn>
+							<v-btn color="error" @click="clearCurrentList"> Очистить </v-btn>
+						</v-card-actions>
+					</v-card>
+				</v-dialog>
+			</v-app>
+		</div>
+		<script src="https://unpkg.com/vue@3"></script>
+		<script src="https://unpkg.com/vue-router@4"></script>
+		<script src="https://unpkg.com/vuex@4"></script>
+		<script src="https://cdn.jsdelivr.net/npm/vuetify@3.4.0/dist/vuetify.min.js"></script>
+
+		<script>
+			const { createApp } = Vue
+			const { createRouter, createWebHashHistory } = VueRouter
+			const { createStore } = Vuex
+			const { createVuetify } = Vuetify
+
+			const vuetify = createVuetify()
+			const store = createStore({
+				state() {
+					return {
+						lists: JSON.parse(localStorage.getItem('todoLists')) || [
+							{
+								id: 'personal',
+								name: 'Личные дела',
+								items: [
+									{
+										id: 1,
+										label: 'Выкинуть мусор',
+										purchased: false,
+										highPriority: true,
+									},
+									{
+										id: 2,
+										label: 'Сходить в зал',
+										purchased: false,
+										highPriority: false,
+									},
+								],
+							},
+							{
+								id: 'work',
+								name: 'Рабочие задачи',
+								items: [
+									{
+										id: 3,
+										label: 'Сделать домашнее задание',
+										purchased: false,
+										highPriority: true,
+									},
+									{
+										id: 4,
+										label: 'Подготовить отчёт',
+										purchased: false,
+										highPriority: false,
+									},
+								],
+							},
+						],
+						currentListId: 'personal',
+						editing: false,
+					}
+				},
+				mutations: {
+					ADD_LIST(state, list) {
+						state.lists.push(list)
+						this.commit('SAVE_TO_LOCALSTORAGE')
+					},
+					DELETE_LIST(state, listId) {
+						state.lists = state.lists.filter(list => list.id !== listId)
+						if (state.currentListId === listId) {
+							state.currentListId = state.lists[0]?.id || ''
+						}
+						this.commit('SAVE_TO_LOCALSTORAGE')
+					},
+					ADD_ITEM(state, { listId, item }) {
+						const list = state.lists.find(l => l.id === listId)
+						if (list) {
+							list.items.push(item)
+							this.commit('SAVE_TO_LOCALSTORAGE')
+						}
+					},
+					REMOVE_ITEM(state, { listId, itemId }) {
+						const list = state.lists.find(l => l.id === listId)
+						if (list) {
+							list.items = list.items.filter(item => item.id !== itemId)
+							this.commit('SAVE_TO_LOCALSTORAGE')
+						}
+					},
+					TOGGLE_ITEM_STATUS(state, { listId, itemId }) {
+						const list = state.lists.find(l => l.id === listId)
+						if (list) {
+							const item = list.items.find(i => i.id === itemId)
+							if (item) {
+								item.purchased = !item.purchased
+								this.commit('SAVE_TO_LOCALSTORAGE')
+							}
+						}
+					},
+					CLEAR_COMPLETED(state, listId) {
+						const list = state.lists.find(l => l.id === listId)
+						if (list) {
+							list.items = list.items.filter(item => !item.purchased)
+							this.commit('SAVE_TO_LOCALSTORAGE')
+						}
+					},
+					CLEAR_LIST(state, listId) {
+						const list = state.lists.find(l => l.id === listId)
+						if (list) {
+							list.items = []
+							this.commit('SAVE_TO_LOCALSTORAGE')
+						}
+					},
+					SET_CURRENT_LIST(state, listId) {
+						state.currentListId = listId
+					},
+					TOGGLE_EDITING(state, editing) {
+						state.editing = editing
+					},
+					SAVE_TO_LOCALSTORAGE(state) {
+						localStorage.setItem('todoLists', JSON.stringify(state.lists))
+					},
+				},
+				actions: {
+					addList({ commit }, list) {
+						commit('ADD_LIST', list)
+					},
+					deleteList({ commit }, listId) {
+						commit('DELETE_LIST', listId)
+					},
+					addItem({ commit }, { listId, item }) {
+						commit('ADD_ITEM', { listId, item })
+					},
+					removeItem({ commit }, { listId, itemId }) {
+						commit('REMOVE_ITEM', { listId, itemId })
+					},
+					toggleItemStatus({ commit }, { listId, itemId }) {
+						commit('TOGGLE_ITEM_STATUS', { listId, itemId })
+					},
+					clearCompleted({ commit }, listId) {
+						commit('CLEAR_COMPLETED', listId)
+					},
+					clearList({ commit }, listId) {
+						commit('CLEAR_LIST', listId)
+					},
+					setCurrentList({ commit }, listId) {
+						commit('SET_CURRENT_LIST', listId)
+					},
+					toggleEditing({ commit }, editing) {
+						commit('TOGGLE_EDITING', editing)
+					},
+				},
+				getters: {
+					lists: state => state.lists,
+					currentListId: state => state.currentListId,
+					currentList: state =>
+						state.lists.find(l => l.id === state.currentListId),
+					currentItems: (state, getters) => getters.currentList?.items || [],
+					editing: state => state.editing,
+				},
+			})
+			const router = createRouter({
+				history: createWebHashHistory(),
+				routes: [
+					{
+						path: '/',
+						redirect: '/list/personal',
+					},
+					{
+						path: '/list/:listId',
+						component: { template: '<div></div>' },
+					},
+				],
+			})
+
+			const app = createApp({
+				data() {
+					return {
+						newItemText: '',
+						newItemHighPriority: false,
+						newListName: '',
+						showAddListDialog: false,
+						showDeleteConfirm: false,
+						showClearConfirm: false,
+					}
+				},
+				computed: {
+					lists() {
+						return this.$store.getters.lists
+					},
+					currentListId: {
+						get() {
+							return this.$store.getters.currentListId
+						},
+						set(value) {
+							this.$store.dispatch('setCurrentList', value)
+						},
+					},
+					currentListName() {
+						const list = this.$store.getters.currentList
+						return list ? list.name : 'Список дел'
+					},
+					currentItems() {
+						return this.$store.getters.currentItems
+					},
+					reversedItems() {
+						return [...this.currentItems].reverse()
+					},
+					editing() {
+						return this.$store.getters.editing
+					},
+				},
+				methods: {
+					addItem() {
+						if (!this.newItemText) return
+
+						const newItem = {
+							id: Date.now(),
+							label: this.newItemText,
+							highPriority: this.newItemHighPriority,
+							purchased: false,
+						}
+
+						this.$store.dispatch('addItem', {
+							listId: this.currentListId,
+							item: newItem,
+						})
+
+						this.newItemText = ''
+						this.newItemHighPriority = false
+					},
+					toggleEditing(editing) {
+						this.$store.dispatch('toggleEditing', editing)
+					},
+					toggleItemStatus(itemId) {
+						this.$store.dispatch('toggleItemStatus', {
+							listId: this.currentListId,
+							itemId: itemId,
+						})
+					},
+					removeItem(itemId) {
+						this.$store.dispatch('removeItem', {
+							listId: this.currentListId,
+							itemId: itemId,
+						})
+					},
+					addList() {
+						if (!this.newListName) return
+
+						const newList = {
+							id: 'list-' + Date.now(),
+							name: this.newListName,
+							items: [],
+						}
+
+						this.$store.dispatch('addList', newList)
+						this.currentListId = newList.id
+						this.$router.push('/list/' + newList.id)
+						this.showAddListDialog = false
+						this.newListName = ''
+					},
+					deleteCurrentList() {
+						this.$store.dispatch('deleteList', this.currentListId)
+						this.showDeleteConfirm = false
+					},
+					clearCompleted() {
+						this.$store.dispatch('clearCompleted', this.currentListId)
+					},
+					clearCurrentList() {
+						this.$store.dispatch('clearList', this.currentListId)
+						this.showClearConfirm = false
+					},
+				},
+				watch: {
+					'$route.params.listId'(newListId) {
+						if (newListId && this.lists.some(l => l.id === newListId)) {
+							this.currentListId = newListId
+						} else {
+							this.$router.push('/list/personal')
+						}
+					},
+				},
+				created() {
+					if (this.$route.params.listId) {
+						this.currentListId = this.$route.params.listId
+					}
+				},
+			})
+
+			app.use(vuetify)
+			app.use(router)
+			app.use(store)
+			app.mount('#app')
+		</script>
+	</body>
+</html>
